@@ -1,0 +1,140 @@
+type Local {
+  name: String!
+}
+
+type StringType {
+  kind: String!
+}
+
+type BooleanType {
+  kind: String!
+}
+
+type NumberType {
+  kind: String!
+}
+
+type VoidType {
+  kind: String!
+}
+
+type UndefinedType {
+  kind: String!
+}
+
+type NullType {
+  kind: String!
+}
+
+type UnknownType {
+  kind: String!
+}
+
+type UndocumentedType {
+  kind: String!
+}
+
+type StringLiteralType {
+  value: String!
+}
+
+type ArrayType {
+  elements: Type!
+}
+
+type UnionType {
+  types: [Type!]!
+}
+
+type Parameter {
+  name: String!
+  typeAnnotation: Type!
+}
+
+type FunctionType {
+  parameters: [Parameter!]!
+  returnType: Type!
+}
+
+type PropertySignature {
+  optional: Boolean!
+  name: String!
+  value: Type!
+}
+
+type InterfaceType {
+  name: String
+  properties: [PropertySignature!]!
+}
+
+union Type =
+    Local
+  | StringType
+  | BooleanType
+  | NumberType
+  | VoidType
+  | UndefinedType
+  | NullType
+  | StringLiteralType
+  | ArrayType
+  | UnionType
+  | InterfaceType
+  | FunctionType
+  | UnknownType
+  | UndocumentedType
+
+union ComponentProps = Local | InterfaceType
+
+type Component {
+  name: String!
+  props: ComponentProps!
+}
+
+type Imported {
+  name: String!
+  path: String!
+}
+
+union Exportable =
+    StringType
+  | Component
+  | BooleanType
+  | NumberType
+  | VoidType
+  | UndefinedType
+  | NullType
+  | StringLiteralType
+  | ArrayType
+  | UnionType
+  | InterfaceType
+  | FunctionType
+  | UnknownType
+  | UndocumentedType
+  | Imported
+
+type ModuleExport {
+  name: String!
+  value: Exportable!
+}
+
+type ModuleLocal {
+  name: String!
+  value: Exportable!
+}
+
+type Module {
+  path: String!
+  exports: [ModuleExport!]!
+  locals: [ModuleLocal!]!
+  local(name: String!): ModuleLocal
+  export(name: String!): ModuleExport
+}
+
+type Query {
+  entry: Module!
+  module(path: String!): Module
+}
+
+schema {
+  query: Query
+}

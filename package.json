@@ -11,9 +11,15 @@
     "lint": "sk lint",
     "type-check": "sk type-check",
     "build": "sk build",
-    "release": "lerna publish"
+    "release": "lerna publish",
+    "run:ts": "babel-node --extensions .ts,.tsx,.mjs,.js,.json",
+    "run:ts:watch": "nodemon --ext .ts,.tsx,.mjs,.json,.graphql node_modules/.bin/babel-node --extensions .ts,.tsx,.mjs,.js,.json"
   },
   "devDependencies": {
+    "@types/koa-graphql": "^0.8.3",
+    "@types/resolve": "^1.17.1",
+    "@babel/node": "^7.8.7",
+    "@microsoft/tsdoc": "^0.12.20",
     "@sewing-kit/cli": "^0.1.0",
     "@sewing-kit/config": "^0.1.0",
     "@sewing-kit/eslint-plugin": "^0.0.14",
@@ -23,7 +29,15 @@
     "@sewing-kit/plugin-package-flexible-outputs": "^0.1.0",
     "@sewing-kit/plugin-react": "^0.1.0",
     "@sewing-kit/plugin-typescript": "^0.1.0",
+    "graphql": "^15.0.0",
+    "graphql-tools": "^6.0.3",
+    "koa-graphql": "^0.8.0",
     "lerna": "^2.11.0",
-    "react": ">=16.8.0 <17.0.0"
+    "nodemon": "^2.0.4",
+    "react": ">=16.8.0 <17.0.0",
+    "resolve": "^1.17.0"
+  },
+  "resolutions": {
+    "graphql": "^15.0.0"
   }
 }
