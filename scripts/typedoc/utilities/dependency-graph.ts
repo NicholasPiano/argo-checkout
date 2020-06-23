@@ -1,14 +1,11 @@
+/* eslint import/no-extraneous-dependencies: off */
+
 import * as path from 'path';
 import {readFileSync} from 'fs';
 import {sync as resolveSync} from 'resolve';
 
-import Koa from 'koa';
-import koaGraphQL from 'koa-graphql';
-import {makeExecutableSchema} from 'graphql-tools';
-
 import {parse} from '@babel/parser';
-// import {isTS} from '@babel/types';
-// import {TSDocParser} from '@microsoft/tsdoc';
+import {TSDocParser, TSDocEmitter, StringBuilder} from '@microsoft/tsdoc';
 
 import type {
   Node,
@@ -20,119 +17,15 @@ import type {
   TSParenthesizedType,
 } from '@babel/types';
 
-interface LocalReference {
-  kind: 'Local';
-  name: string;
-}
-
-interface ImportedReference {
-  kind: 'Imported';
-  name: string;
-  path: string;
-}
-
-interface InterfaceType {
-  kind: 'InterfaceType';
-  name: string;
-  properties: PropertySignature[];
-  docs?: readonly string[];
-}
-
-interface PropertySignature {
-  kind: 'PropertySignature';
-  optional?: boolean;
-  name: string;
-  value: Type;
-  docs?: readonly string[];
-}
-
-interface StringType {
-  kind: 'StringType';
-}
-
-interface BooleanType {
-  kind: 'BooleanType';
-}
-
-interface NumberType {
-  kind: 'NumberType';
-}
-
-interface VoidType {
-  kind: 'VoidType';
-}
-
-interface UndefinedType {
-  kind: 'UndefinedType';
-}
-
-interface NullType {
-  kind: 'NullType';
-}
-
-interface UnknownType {
-  kind: 'UnknownType';
-}
-
-interface UndocumentedType {
-  kind: 'UndocumentedType';
-}
-
-interface StringLiteralType {
-  kind: 'StringLiteralType';
-  value: string;
-}
-
-interface ArrayType {
-  kind: 'ArrayType';
-  elements: Type;
-}
-
-interface UnionType {
-  kind: 'UnionType';
-  types: Type[];
-}
-
-interface ParameterType {
-  kind: 'ParameterType';
-  name: string;
-  rest: boolean;
-  type: Type;
-}
-
-interface FunctionType {
-  kind: 'FunctionType';
-  parameters: ParameterType[];
-  returnType: Type;
-}
-
-type Type =
-  | UnionType
-  | InterfaceType
-  | StringLiteralType
-  | StringType
-  | BooleanType
-  | NumberType
-  | FunctionType
-  | VoidType
-  | UndefinedType
-  | NullType
-  | ArrayType
-  | UnknownType
-  | UndocumentedType;
-
-type RemoteComponentProps = LocalReference | InterfaceType;
-type RemoteComponentChildren = never;
-
-interface RemoteComponent {
-  kind: 'Component';
-  name: string;
-  docs?: readonly string[];
-  props?: RemoteComponentProps;
-  children?: RemoteComponentChildren;
-}
-
-type Exportable = RemoteComponent | Type | ImportedReference;
+import type {
+  ArrayType,
+  ImportedReference,
+  LocalReference,
+  PropertySignature,
+  RemoteComponent,
+  UndocumentedType,
+  Exportable,
+} from '../types';
 
 interface UnresolvedLocal {
   node: Node;
@@ -150,11 +43,12 @@ interface CollectContext {
 interface ProcessContext {
   readonly path: string;
   readonly source: string;
+  readonly docParser: import('@microsoft/tsdoc').TSDocParser;
   readonly resolvedLocals: Map<string, Exportable | LocalReference | false>;
   readonly localsToResolve: Set<string>;
 }
 
-interface Module {
+export interface Module {
   readonly path: string;
   readonly exports: Map<string, Exportable>;
   readonly locals: Map<string, Exportable | LocalReference>;
@@ -165,13 +59,8 @@ const DOCS_COMMENT_REGEX = /^\/\*\*/;
 const UNDOCUMENTED: UndocumentedType = {kind: 'UndocumentedType'};
 const MAX_CONCURRENCY = 5;
 
-run();
-
-async function run() {
+export async function createDependencyGraph(entry: string) {
   const modules = new Map<string, Module>();
-  const componentsIndex = path.resolve(
-    'packages/argo-checkout-testing/src/extension-points/index.ts',
-  );
 
   await new Promise((resolve, reject) => {
     const fileQueue: string[] = [];
@@ -179,7 +68,7 @@ async function run() {
 
     let usedConcurrency = 0;
 
-    take(componentsIndex);
+    take(entry);
 
     function take(file: string) {
       if (seen.has(file)) return;
@@ -228,86 +117,7 @@ async function run() {
     }
   });
 
-  const app = new Koa();
-
-  const basicResolveType = (object: Exportable) => object.kind;
-  const schema = makeExecutableSchema({
-    typeDefs: readFileSync(path.resolve(__dirname, 'schema.graphql'), 'utf8'),
-    resolvers: {
-      Query: {
-        entry() {
-          return modules.get(componentsIndex);
-        },
-        module(_, {path: modulePath}: {path: string}) {
-          const normalizedPath = path.resolve(
-            'packages/argo-checkout-testing',
-            modulePath.startsWith('/') ? modulePath.slice(1) : modulePath,
-          );
-
-          return modules.get(normalizedPath);
-        },
-      },
-      Module: {
-        exports(module: Module) {
-          return [...module.exports.entries()].map(([name, exported]) => ({
-            name,
-            value: exported,
-          }));
-        },
-        locals(module: Module) {
-          return [...module.locals.entries()].map(([name, exported]) => ({
-            name,
-            value: exported,
-          }));
-        },
-      },
-      Exportable: {
-        __resolveType: basicResolveType,
-      },
-      ComponentProps: {
-        __resolveType: basicResolveType,
-      },
-      Type: {
-        __resolveType: basicResolveType,
-      },
-    },
-  });
-
-  app.use(koaGraphQL({schema, graphiql: true}));
-
-  app.listen(8911, () => {
-    console.log(`listening on http://localhost:8911`);
-  });
-
-  debugger;
-
-  // const processed = await extractModule(componentFile('BlockStack'));
-  // debugger;
-  // console.log(JSON.stringify(processed.exports.get('TextFieldProps'), null, 2));
-}
-
-function resolveImport(
-  {name, path}: Pick<ImportedReference, 'name' | 'path'>,
-  modules: Map<string, Module>,
-) {
-  let resolvePath = path;
-  let resolveName = name;
-
-  while (true) {
-    const module = modules.get(resolvePath);
-    const resolved = module?.exports.get(resolveName);
-
-    if (resolved == null) {
-      throw new Error(
-        `Can’t resolve export ${resolveName} in ${JSON.stringify(resolvePath)}`,
-      );
-    } else if (resolved.kind === 'Imported') {
-      resolvePath = resolved.path;
-      resolveName = resolved.name;
-    } else {
-      return {value: resolved, module};
-    }
-  }
+  return modules;
 }
 
 async function extractModule(file: string): Promise<Module> {
@@ -344,6 +154,7 @@ async function extractModule(file: string): Promise<Module> {
   const processContext: ProcessContext = {
     path: file,
     source,
+    docParser: new TSDocParser(),
     resolvedLocals,
     localsToResolve,
   };
@@ -419,6 +230,9 @@ function resolveNodeToLocal(
       switch (node.literal.type) {
         case 'StringLiteral': {
           return {kind: 'StringLiteralType', value: node.literal.value};
+        }
+        case 'NumericLiteral': {
+          return {kind: 'NumberLiteralType', value: node.literal.value};
         }
         default: {
           throw new Error();
@@ -644,7 +458,19 @@ function docsFromCommentBlocks(
     }
   }
 
-  return docs.length > 0 ? docs : undefined;
+  if (docs.length === 0) {
+    return undefined;
+  }
+
+  const parser = new TSDocParser();
+  const parserContext = parser.parseString(docs.join('\n'));
+  const {docComment} = parserContext;
+
+  // oh microsoft
+  const stringBuilder = new StringBuilder();
+  new TSDocEmitter().renderComment(stringBuilder, docComment);
+
+  return {content: stringBuilder.toString()};
 }
 
 function collectLocalsFromStatement(
