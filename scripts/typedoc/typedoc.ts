@@ -1,4 +1,5 @@
 import * as path from 'path';
+import * as fs from 'fs';
 
 import type {ImportedReference} from './types';
 import {createDependencyGraph, Module} from './utilities/dependency-graph';
@@ -12,16 +13,34 @@ async function run() {
 
   const graph = await createDependencyGraph(componentIndex);
 
-  console.log(
-    JSON.stringify(
-      resolveImport(
-        graph.get(componentIndex)!.exports.get('TextFieldProps') as any,
-        graph,
+  const resolvedComponentDirs = [
+    ...new Set(
+      [...graph.get(componentIndex)!.exports.values()].map(({path}: any) =>
+        path.substring(0, path.length - 9),
       ),
-      null,
-      2,
     ),
-  );
+  ];
+
+  resolvedComponentDirs.forEach((directory) => {
+    const exports = [] as any;
+    graph.get(`${directory}/index.ts`)!.exports.forEach((value) => {
+      exports.push(resolveImport(value as any, graph));
+    });
+
+    const components = exports.filter(
+      ({value}: any) => value.kind === 'Component',
+    );
+
+    let markdown = '';
+
+    components.forEach(({value: {name, docs}}: any) => {
+      markdown += `# ${name}\n${docs ? strip(docs.content) : ''}`;
+    });
+
+    fs.writeFile(`${directory}/README.md`, markdown, function (err) {
+      if (err) throw err;
+    });
+  });
 }
 
 function resolveImport(
@@ -46,4 +65,13 @@ function resolveImport(
       return {value: resolved, module};
     }
   }
+}
+
+function strip(content: string) {
+  return content
+    .replace('/**', '')
+    .replace('*/', '')
+    .replace('\n * ', '\n')
+    .replace('\n *', '\n')
+    .replace('\n\n * ', '\n\n');
 }
