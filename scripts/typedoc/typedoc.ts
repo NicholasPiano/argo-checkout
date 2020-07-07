@@ -33,8 +33,23 @@ async function run() {
 
     let markdown = '';
 
-    components.forEach(({value: {name, docs}}: any) => {
+    components.forEach(({value: {name, docs, props}}: any) => {
       markdown += `# ${name}\n${docs ? strip(docs.content) : ''}`;
+
+      const propData = exports.find(
+        ({value}: any) => value.name === props.name,
+      );
+
+      markdown +=
+        '## Props\n|Name|Optional|Type|Description|\n|---|---|---|---|\n';
+
+      propData.value.properties.forEach(
+        ({name, optional, value, docs}: any) => {
+          markdown += `|${name}|${optional}|${JSON.stringify(value)}|${
+            docs ? strip(docs.content).replace(/(\r\n|\n|\r)/gm, '') : ''
+          }|\n`;
+        },
+      );
     });
 
     fs.writeFile(`${directory}/README.md`, markdown, function (err) {
