@@ -90,7 +90,7 @@ function propType(value: any, exports: any[], dir: string): any {
     case 'BooleanType':
       return '<code>boolean</code>';
     case 'ArrayType':
-      return propType(value.elements, exports, dir);
+      return `Array of ${propType(value.elements, exports, dir)}`;
     case 'NumberType':
       return '<code>number</code>';
     case 'Local':
@@ -107,18 +107,48 @@ function propType(value: any, exports: any[], dir: string): any {
     case 'InterfaceType':
       return propsTable(value.properties, exports, dir);
     case 'UnionType':
-      return `<code>${value.types
+      return value.types
         .map((type: any) => {
           return propType(type, exports, dir);
         })
-        .join(' | ')}</code>`;
+        .join(' | ');
     case 'StringLiteralType':
-      return `"${value.value}"`;
+      return `<code>"${value.value}"</code>`;
     case 'NumberLiteralType':
-      return `${value.value}`;
+      return `<code>${value.value}</code>`;
+    case 'FunctionType':
+      return `<code>(${paramsType(value.parameters)}) => ${returnType(
+        value.returnType.kind,
+      )}</code>`;
     default:
-      return JSON.stringify(value);
+      return `<pre>${JSON.stringify(value, null, 2)}</pre>`;
   }
+}
+
+function returnType(type: string) {
+  switch (type) {
+    case 'VoidType':
+      return 'void';
+    default:
+      return type;
+  }
+}
+
+function argType(type: string) {
+  switch (type) {
+    case 'BooleanType':
+      return 'boolean';
+    case 'StringType':
+      return 'string';
+    default:
+      return type;
+  }
+}
+
+function paramsType(params: any[]) {
+  return params
+    .map((param) => `${param.name}: ${argType(param.type.kind)}`)
+    .join(', ');
 }
 
 function resolveImport(
@@ -146,10 +176,22 @@ function resolveImport(
 }
 
 function strip(content: string) {
-  return content
-    .replace('/**', '')
-    .replace('*/', '')
-    .replace('\n * ', '\n')
-    .replace('\n *', '\n')
-    .replace('\n\n * ', '\n\n');
+  return escapeHTML(
+    content
+      .replace('/**', '')
+      .replace('*/', '')
+      .replace('\n * ', '\n')
+      .replace('\n *', '\n')
+      .replace('\n\n * ', '\n\n'),
+  );
+}
+
+function escapeHTML(html: string) {
+  const chars: {[key: string]: string} = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&#34;',
+  };
+  return html.replace(/[&<>"]/g, (tag: string) => chars[tag] || tag);
 }
