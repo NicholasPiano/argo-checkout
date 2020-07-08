@@ -13,6 +13,7 @@ async function run() {
 
   const graph = await createDependencyGraph(componentIndex);
 
+  // Get de-duped component directories as they should be 1:1 with README files.
   const resolvedComponentDirs = [
     ...new Set(
       [...graph.get(componentIndex)!.exports.values()].map(({path}: any) =>
@@ -21,41 +22,103 @@ async function run() {
     ),
   ];
 
+  // Loop through each directory, get all exports from the index, and build docs.
   resolvedComponentDirs.forEach((directory) => {
     const exports = [] as any;
-    graph.get(`${directory}/index.ts`)!.exports.forEach((value) => {
-      exports.push(resolveImport(value as any, graph));
+    graph.get(`${directory}/index.ts`)!.exports.forEach((value, key) => {
+      const resolved = resolveImport(value as any, graph) as any;
+
+      if (resolved.value.name == null) {
+        resolved.value.name = key;
+      }
+
+      exports.push(resolved);
     });
 
+    // Find the components in the exports. This uses Array#filter because FormLayout has 2 components.
     const components = exports.filter(
       ({value}: any) => value.kind === 'Component',
     );
 
     let markdown = '';
 
+    // Go through each component and build a README.md with the component name and doc content.
+    // Find the component props and recursively build the props table.
+    // Nested interfaces are rendered as nested tables in the type column.
     components.forEach(({value: {name, docs, props}}: any) => {
       markdown += `# ${name}\n${docs ? strip(docs.content) : ''}`;
 
-      const propData = exports.find(
-        ({value}: any) => value.name === props.name,
-      );
+      const {
+        value: {properties},
+      } = exports.find(({value}: any) => value.name === props.name);
 
-      markdown +=
-        '## Props\n|Name|Optional|Type|Description|\n|---|---|---|---|\n';
-
-      propData.value.properties.forEach(
-        ({name, optional, value, docs}: any) => {
-          markdown += `|${name}|${optional}|${JSON.stringify(value)}|${
-            docs ? strip(docs.content).replace(/(\r\n|\n|\r)/gm, '') : ''
-          }|\n`;
-        },
-      );
+      if (properties.length > 0) {
+        markdown += '## Props\nrequired = *\n';
+        markdown += propsTable(properties, exports, directory);
+      }
     });
 
     fs.writeFile(`${directory}/README.md`, markdown, function (err) {
       if (err) throw err;
     });
   });
+}
+
+function propsTable(properties: any, exports: any, dir: string) {
+  let tableMarkdown =
+    '<table><tr><th>Name</th><th>Type</th><th>Description</th></tr>';
+
+  properties.forEach(({name, optional, value, docs}: any) => {
+    tableMarkdown += `<tr><td>${name}${optional ? '' : '*'}</td><td>${propType(
+      value,
+      exports,
+      dir,
+    )}</td><td>${
+      docs ? strip(docs.content).replace(/(\r\n|\n|\r)/gm, '') : ''
+    }</td></tr>`;
+  });
+
+  tableMarkdown += '</table>';
+
+  return tableMarkdown;
+}
+
+function propType(value: any, exports: any[], dir: string): any {
+  switch (value.kind) {
+    case 'StringType':
+      return '<code>string</code>';
+    case 'BooleanType':
+      return '<code>boolean</code>';
+    case 'ArrayType':
+      return propType(value.elements, exports, dir);
+    case 'NumberType':
+      return '<code>number</code>';
+    case 'Local':
+      // eslint-disable-next-line no-case-declarations
+      const local = exports.find(
+        ({value: exportValue}: any) => exportValue.name === value.name,
+      );
+      if (local == null) {
+        throw new Error(
+          `Can’t resolve export type \`${value.name}\` in ${dir}/index.ts. It’s probably not exported from the component index.`,
+        );
+      }
+      return propType(local.value, exports, dir);
+    case 'InterfaceType':
+      return propsTable(value.properties, exports, dir);
+    case 'UnionType':
+      return `<code>${value.types
+        .map((type: any) => {
+          return propType(type, exports, dir);
+        })
+        .join(' | ')}</code>`;
+    case 'StringLiteralType':
+      return `"${value.value}"`;
+    case 'NumberLiteralType':
+      return `${value.value}`;
+    default:
+      return JSON.stringify(value);
+  }
 }
 
 function resolveImport(
