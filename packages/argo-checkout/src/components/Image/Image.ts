@@ -80,4 +80,8 @@ export type Fit = 'cover' | 'contain';
 export type Resolution = 1 | 1.3 | 1.5 | 2 | 2.6 | 3 | 3.5 | 4;
 export type Loading = 'eager' | 'lazy';
 
+/**
+ * Image is used for large format, responsive images.
+ * For small images use Thumbnail.
+ */
 export const Image = createRemoteComponent<'Image', ImageProps>('Image');
